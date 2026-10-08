@@ -41,3 +41,34 @@ CREATE TABLE videos (
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 );
 
+
+-- ==========================================
+-- GESTION DES BOUTIQUES SHOPIFY (MULTI-STORES)
+-- ==========================================
+CREATE TABLE stores (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    domain VARCHAR(255) NOT NULL,
+    shopify_api_key VARCHAR(255) NOT NULL,
+    shopify_api_secret VARCHAR(255) NOT NULL,
+    ga4_measurement_id VARCHAR(255) NULL,
+    status ENUM('active', 'inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Lier les produits aux boutiques
+ALTER TABLE products ADD COLUMN store_id INT NULL AFTER id;
+ALTER TABLE products ADD FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE SET NULL;
+
+-- ==========================================
+-- GESTION DES TENDANCES SCRAPÉES
+-- ==========================================
+CREATE TABLE trends (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    hashtag VARCHAR(100) NOT NULL,
+    video_url VARCHAR(255) NOT NULL,
+    views_count VARCHAR(50) NOT NULL,
+    description TEXT,
+    is_processed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
