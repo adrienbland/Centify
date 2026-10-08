@@ -102,3 +102,22 @@ CREATE TABLE tiktok_publications (
     FOREIGN KEY (social_account_id) REFERENCES social_accounts(id) ON DELETE CASCADE,
     FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE
 );
+
+-- ==========================================
+-- PARAMÈTRES GLOBAUX (SETTINGS)
+-- ==========================================
+CREATE TABLE settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(255) UNIQUE NOT NULL,
+    setting_value TEXT NULL,
+    description VARCHAR(255) NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Exemples d'insertion par défaut pour les paramètres modifiables depuis le Hub
+INSERT INTO settings (setting_key, setting_value, description) VALUES
+('ollama_url', 'http://host.docker.internal:11434/api/generate', 'URL API du serveur Ollama local'),
+('ollama_model', 'qwen2.5:7b', 'Modèle IA utilisé pour la génération des scripts'),
+('tts_voice', 'fr-FR-HenriNeural', 'Voix Edge-TTS pour les vidéos'),
+('video_speed_min', '0.95', 'Vitesse minimum aléatoire pour anti-shadowban'),
+('video_speed_max', '1.05', 'Vitesse maximum aléatoire pour anti-shadowban');

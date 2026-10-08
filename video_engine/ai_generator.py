@@ -1,9 +1,10 @@
 import asyncio
 import edge_tts
 import requests
+from config import Config
+from logger import setup_logger
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "qwen2.5:7b"
+logger = setup_logger("AIGenerator")
 
 class AIGenerator:
     """
@@ -15,7 +16,7 @@ class AIGenerator:
         """
         Génère un script viral avec Ollama.
         """
-        print(f"[AIGenerator] Génération du script pour : {product_name}...")
+        logger.info(f"Génération du script pour : {product_name}...")
         prompt = (
             f"Tu es un expert TikTok dans la niche {niche}. "
             f"Génère un script vidéo vocal très court (15 secondes max) et agressif "
@@ -25,17 +26,20 @@ class AIGenerator:
         )
         
         payload = {
-            "model": MODEL,
+            "model": Config.OLLAMA_MODEL,
             "prompt": prompt,
             "stream": False
         }
         
         try:
-            response = requests.post(OLLAMA_URL, json=payload, timeout=60)
+            response = requests.post(Config.OLLAMA_URL, json=payload, timeout=60)
             response.raise_for_status()
             return response.json().get("response", "").strip()
+        except requests.exceptions.Timeout:
+            logger.error("Timeout : Le serveur Ollama a mis trop de temps à répondre.")
+            return f"Incroyable ! Ce {product_name} va changer votre vie. Lien en bio !"
         except Exception as e:
-            print(f"[AIGenerator] Erreur Ollama: {e}")
+            logger.error(f"Erreur Ollama: {e}")
             return f"Incroyable ! Ce {product_name} va changer votre vie. Lien en bio !"
 
     @staticmethod
@@ -43,10 +47,12 @@ class AIGenerator:
         """
         Génère l'audio avec Edge-TTS.
         """
-        print(f"[AIGenerator] Génération de la voix-off vers {output_path}...")
-        # Voix masculine dynamique française
-        voice = "fr-FR-HenriNeural" 
-        communicate = edge_tts.Communicate(text, voice)
-        await communicate.save(output_path)
-        print("[AIGenerator] Voix-off générée avec succès.")
+        logger.info(f"Génération de la voix-off vers {output_path}...")
+        try:
+            communicate = edge_tts.Communicate(text, Config.TTS_VOICE)
+            await communicate.save(output_path)
+            logger.info("Voix-off générée avec succès.")
+        except Exception as e:
+            logger.error(f"Échec de la génération de la voix-off : {e}")
+            raise
 
