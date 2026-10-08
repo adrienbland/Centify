@@ -31,3 +31,4 @@ Le moteur vidéo Python génère ses propres fichiers de logs détaillés pour c
 1. **Un webhook Shopify ne passe pas ?** Regarde l'onglet "API Logs" dans Filament. Le payload JSON brut y sera visible.
 2. **Une vidéo TikTok ne se publie pas ?** Vérifie le `status` dans `tiktok_publications`, puis croise avec l'onglet "API Logs".
 3. **Le rendu vidéo prend trop de temps ?** Ouvre `video_engine/logs/pipeline.log` pour voir à quelle étape (Whisper, Edge-TTS, MoviePy) le script bloque.
+
