@@ -22,4 +22,9 @@ class Product extends Model
     {
         return $this->belongsTo(SocialAccount::class, 'default_tiktok_account_id');
     }
+
+    public function scripts()
+    {
+        return $this->hasMany(Script::class);
+    }
 }

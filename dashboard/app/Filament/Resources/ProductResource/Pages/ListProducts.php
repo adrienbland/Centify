@@ -13,6 +13,10 @@ class ListProducts extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('refresh')
+                ->label('Actualiser')
+                ->icon('heroicon-o-arrow-path')
+                ->action(fn () => null),
             Actions\CreateAction::make(),
         ];
     }

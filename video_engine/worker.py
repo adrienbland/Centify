@@ -95,3 +95,4 @@ if __name__ == "__main__":
     while True:
         process_rendering_videos()
         time.sleep(5)  # Poll every 5 seconds
+

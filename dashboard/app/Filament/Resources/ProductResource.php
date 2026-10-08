@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ProductResource\Pages;
+use App\Filament\Resources\ProductResource\RelationManagers;
 use App\Models\Product;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -40,15 +41,21 @@ class ProductResource extends Resource
                                 TextInput::make('name')
                                     ->label('Nom du Produit')
                                     ->required()
-                                    ->maxLength(255),
+                                    ->maxLength(255)
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(fn ($record, $state) => $record?->update(['name' => $state])),
                                 
                                 TextInput::make('niche')
                                     ->label('Niche (ex: Tech, Beauté)')
-                                    ->maxLength(100),
+                                    ->maxLength(100)
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(fn ($record, $state) => $record?->update(['niche' => $state])),
 
                                 MarkdownEditor::make('description')
                                     ->label('Description Marketing')
-                                    ->columnSpanFull(),
+                                    ->columnSpanFull()
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(fn ($record, $state) => $record?->update(['description' => $state])),
                             ])->columns(2),
 
                         Section::make('Intelligence Artificielle (Le Cerveau)')
@@ -110,6 +117,7 @@ class ProductResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->poll('5s')
             ->columns([
                 TextColumn::make('name')
                     ->label('Produit')
@@ -158,7 +166,9 @@ class ProductResource extends Resource
 
     public static function getRelations(): array
     {
-        return [];
+        return [
+            RelationManagers\ScriptsRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

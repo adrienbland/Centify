@@ -19,6 +19,8 @@ services:
       - DB_USER=centify_user
       - DB_PASSWORD=centify_pass
       - DB_NAME=centify_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - centify_net
     depends_on:
