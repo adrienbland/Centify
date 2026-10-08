@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------
+  # 1. LE HUB CENTRAL (DASHBOARD) - PHP / Nginx
+  # ---------------------------------------------------------
+  dashboard:
+    build: 
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: centify_dashboard
+    restart: unless-stopped
+    ports:
+      - "3002:80" # Port libre, à mapper via Nginx Proxy Manager
+    volumes:
+      - ./dashboard:/var/www/html
+    environment:
+      - DB_HOST=db
+      - DB_USER=centify_user
+      - DB_PASSWORD=centify_pass
+      - DB_NAME=centify_db
+    networks:
+      - centify_net
+    depends_on:
+      - db
+
+  # ---------------------------------------------------------
+  # 2. BASE DE DONNÉES (SQL)
+  # ---------------------------------------------------------
+  db:
+    image: mariadb:10.11
+    container_name: centify_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: centify_db
+      MYSQL_USER: centify_user
+      MYSQL_PASSWORD: centify_pass
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - centify_net
+
+  # ---------------------------------------------------------
+  # 3. MOTEUR DE RENDU VIDÉO (PYTHON)
+  # ---------------------------------------------------------
+  video_engine:
+    build:
+      context: ./video_engine
+      dockerfile: Dockerfile
+    container_name: centify_video_engine
+    restart: unless-stopped
+    volumes:
+      - ./video_engine:/app
+      - ./medias:/app/medias # Dossier partagé pour les vidéos brutes et finales
+    environment:
+      # L'URL pointera vers l'Ollama local de l'hôte (port 11434)
+      - OLLAMA_URL=http://host.docker.internal:11434/api/generate
+      - DB_HOST=db
+      - DB_USER=centify_user
+      - DB_PASSWORD=centify_pass
+      - DB_NAME=centify_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - centify_net
+
+  # ---------------------------------------------------------
+  # (Optionnel) SERVEUR OLLAMA DÉDIÉ 
+  # NB: Si tu préfères utiliser celui déjà sur le port 11434 (Prométhée),
+  # ce service n'est pas nécessaire, video_engine s'y connecte via host.docker.internal.
+  # ---------------------------------------------------------
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: centify_ollama
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   ports:
+  #     - "11435:11434" # Décalé sur 11435 pour éviter le conflit avec Prométhée
+  #   networks:
+  #     - centify_net
+
+networks:
+  centify_net:
+    driver: bridge
+
+volumes:
+  db_data:
+  ollama_data:
+

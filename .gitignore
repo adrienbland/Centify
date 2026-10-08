@@ -1,0 +1,6 @@
+logs/
+.env
+medias/
+__pycache__/
+*.mp3
+*.mp4
