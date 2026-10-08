@@ -121,3 +121,47 @@ INSERT INTO settings (setting_key, setting_value, description) VALUES
 ('tts_voice', 'fr-FR-HenriNeural', 'Voix Edge-TTS pour les vidéos'),
 ('video_speed_min', '0.95', 'Vitesse minimum aléatoire pour anti-shadowban'),
 ('video_speed_max', '1.05', 'Vitesse maximum aléatoire pour anti-shadowban');
+
+-- ==========================================
+-- SYSTÈME DE CATÉGORIES
+-- ==========================================
+CREATE TABLE categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    ai_custom_instructions TEXT NULL -- Instructions par défaut pour l'IA dans cette catégorie
+);
+ALTER TABLE products ADD COLUMN category_id INT NULL AFTER name;
+ALTER TABLE products ADD FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL;
+
+-- ==========================================
+-- REFINEMENTS PRODUITS ET COMPTES SOCIAUX
+-- ==========================================
+ALTER TABLE products ADD COLUMN ai_custom_prompt TEXT NULL AFTER description; -- Instructions spécifiques de l'utilisateur à l'IA
+ALTER TABLE products ADD COLUMN default_tiktok_account_id INT NULL AFTER store_id; -- Lier un produit à un compte TikTok spécifique
+ALTER TABLE products ADD FOREIGN KEY (default_tiktok_account_id) REFERENCES social_accounts(id) ON DELETE SET NULL;
+
+-- ==========================================
+-- REFINEMENTS VIDÉOS (FEEDBACK ET RETOUCHES)
+-- ==========================================
+ALTER TABLE videos ADD COLUMN user_feedback TEXT NULL AFTER duration_seconds; -- Retours de l'utilisateur pour refaire la vidéo
+ALTER TABLE videos MODIFY COLUMN status ENUM('rendering', 'ready', 'needs_revision', 'scheduled', 'published', 'failed') DEFAULT 'rendering';
+
+-- ==========================================
+-- NOTIFICATIONS ET HISTORIQUE (LOGS)
+-- ==========================================
+CREATE TABLE notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    type ENUM('info', 'success', 'warning', 'error', 'ai_advice') DEFAULT 'info',
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE activity_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    action VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
