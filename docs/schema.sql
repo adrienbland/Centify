@@ -165,3 +165,73 @@ CREATE TABLE activity_logs (
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ==========================================
+-- MEDIATHEQUE GLOBALE (ASSETS)
+-- ==========================================
+CREATE TABLE media_library (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    type ENUM('audio', 'b_roll', 'font', 'transition') NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    file_path VARCHAR(255) NOT NULL,
+    tags VARCHAR(255) NULL, -- Ex: 'Suspense', 'ASMR'
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==========================================
+-- HOOK TESTER (A/B TESTING)
+-- ==========================================
+CREATE TABLE video_variants (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    video_id INT NOT NULL,
+    hook_text TEXT NOT NULL,
+    hook_audio_path VARCHAR(255) NULL,
+    views INT DEFAULT 0,
+    likes INT DEFAULT 0,
+    retention_3s DECIMAL(5,2) DEFAULT 0, -- Taux de rétention à 3 secondes
+    is_winner BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE
+);
+
+-- ==========================================
+-- GESTIONNAIRE DE PROXYS
+-- ==========================================
+CREATE TABLE proxies (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    ip_address VARCHAR(50) NOT NULL,
+    port INT NOT NULL,
+    username VARCHAR(100) NULL,
+    password VARCHAR(100) NULL,
+    status ENUM('active', 'banned', 'dead') DEFAULT 'active',
+    last_used_at DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==========================================
+-- API & WEBHOOK DEBUGGER (LOGS DE L'OMBRE)
+-- ==========================================
+CREATE TABLE api_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    service ENUM('shopify', 'tiktok', 'ollama', 'system') NOT NULL,
+    endpoint VARCHAR(255) NULL,
+    payload JSON NULL,
+    response JSON NULL,
+    status_code INT NULL,
+    error_message TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==========================================
+-- SUIVI DE RENTABILITÉ (COST TRACKER)
+-- ==========================================
+CREATE TABLE expenses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    store_id INT NULL,
+    category ENUM('proxy', 'hosting', 'domain', 'apps', 'other') NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    date DATE NOT NULL,
+    description TEXT,
+    FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE SET NULL
+);
+
+ALTER TABLE stores ADD COLUMN total_revenue DECIMAL(10,2) DEFAULT 0;
