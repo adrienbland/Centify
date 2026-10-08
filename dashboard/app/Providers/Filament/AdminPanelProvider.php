@@ -31,8 +31,10 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Purple,
             ])
             ->defaultThemeMode(\Filament\Enums\ThemeMode::Dark)
-            ->brandLogo(asset('images/logo.png'))
-            ->brandLogoHeight('2.5rem')
+            ->brandLogo(asset('images/logo.svg'))
+            ->brandLogoHeight('3rem')
+            ->favicon(asset('favicon.svg?v=3'))
+            ->brandName('Centify')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([

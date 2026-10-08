@@ -4,3 +4,4 @@ moviepy
 faster-whisper
 
 playwright
+mysql-connector-python

@@ -97,6 +97,7 @@ class VideoResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->poll('5s') // Auto-refresh toutes les 5 secondes
             ->columns([
                 TextColumn::make('product.name')
                     ->label('Produit')
@@ -158,3 +159,4 @@ class VideoResource extends Resource
         ];
     }
 }
+
