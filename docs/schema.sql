@@ -72,3 +72,33 @@ CREATE TABLE trends (
     is_processed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ==========================================
+-- GESTION DES RESEAUX SOCIAUX (TIKTOK)
+-- ==========================================
+CREATE TABLE social_accounts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    store_id INT NOT NULL,
+    platform ENUM('tiktok', 'instagram', 'youtube') NOT NULL,
+    account_name VARCHAR(255) NOT NULL,
+    access_token VARCHAR(500) NOT NULL,
+    refresh_token VARCHAR(500) NULL,
+    open_id VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
+);
+
+-- Suivi des vidéos publiées depuis le Hub
+CREATE TABLE tiktok_publications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    social_account_id INT NOT NULL,
+    video_id INT NOT NULL, -- Référence à la table videos
+    tiktok_post_id VARCHAR(255) NULL,
+    description TEXT,
+    published_at DATETIME,
+    views INT DEFAULT 0,
+    likes INT DEFAULT 0,
+    status ENUM('pending', 'published', 'failed') DEFAULT 'pending',
+    FOREIGN KEY (social_account_id) REFERENCES social_accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE
+);
