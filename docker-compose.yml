@@ -54,7 +54,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./video_engine:/app
-      - ./medias:/app/medias # Dossier partagé pour les vidéos brutes et finales
+      - ./dashboard/public/medias:/app/medias # Dossier partagé avec le Hub Laravel pour les B-Rolls et vidéos finales
     environment:
       # L'URL pointera vers l'Ollama local de l'hôte (port 11434)
       - OLLAMA_URL=http://host.docker.internal:11434/api/generate

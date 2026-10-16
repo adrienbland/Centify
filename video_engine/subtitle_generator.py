@@ -1,81 +1,156 @@
 import os
-from faster_whisper import WhisperModel
-from moviepy.editor import TextClip, CompositeVideoClip, VideoFileClip
+from moviepy import TextClip, CompositeVideoClip, VideoFileClip
+from config import Config
+from logger import setup_logger
+
+logger = setup_logger("SubtitleGenerator")
 
 class SubtitleGenerator:
     """
-    Générateur de sous-titres dynamiques 100% local (Faster-Whisper).
+    Générateur de sous-titres dynamiques style TikTok / Shorts (MoviePy 2.x).
+    Utilise en priorité les horodatages WordBoundary d'Edge-TTS (ultra-rapide, 0 RAM),
+    avec fallback automatique sur Faster-Whisper si nécessaire.
     """
     def __init__(self, model_size="small", compute_type="int8"):
-        # "small" ou "base" est suffisant pour des vidéos courtes et rapides.
-        # compute_type="int8" permet de consommer très peu de RAM/VRAM.
-        print(f"[SubtitleGenerator] Chargement du modèle Whisper ({model_size})...")
-        self.model = WhisperModel(model_size, device="cpu", compute_type=compute_type)
+        self.model_size = model_size
+        self.compute_type = compute_type
+        self._whisper_model = None
+        self.font_path = Config.SUBTITLE_FONT
+        if not os.path.exists(self.font_path):
+            # Fallback sur une police DejaVu standard si le chemin custom n'existe pas
+            self.font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+    def _get_whisper_model(self):
+        if self._whisper_model is None:
+            from faster_whisper import WhisperModel
+            logger.info(f"Chargement à la demande du modèle Faster-Whisper ({self.model_size})...")
+            self._whisper_model = WhisperModel(self.model_size, device="cpu", compute_type=self.compute_type)
+        return self._whisper_model
 
     def extract_word_timestamps(self, audio_path):
         """
-        Transcrit l'audio et renvoie une liste de dictionnaires pour chaque mot avec start et end.
+        Fallback : Transcrit l'audio avec Faster-Whisper et renvoie la liste des mots horodatés.
         """
-        print(f"[SubtitleGenerator] Transcription de l'audio : {audio_path}")
-        segments, info = self.model.transcribe(audio_path, word_timestamps=True, language="fr")
+        logger.info(f"Transcription Whisper de l'audio : {audio_path}")
+        model = self._get_whisper_model()
+        segments, _ = model.transcribe(audio_path, word_timestamps=True, language="fr")
         
         words = []
         for segment in segments:
             for word in segment.words:
                 words.append({
                     "text": word.word.strip(),
-                    "start": word.start,
-                    "end": word.end
+                    "start": float(word.start),
+                    "end": float(word.end)
                 })
         return words
 
-    def overlay_subtitles_on_video(self, video_path, audio_path, output_path):
+    @staticmethod
+    def group_words_into_chunks(words, max_words=3, max_chars=22):
         """
-        Génère les mots, crée les clips textuels avec MoviePy, et les superpose à la vidéo.
+        Regroupe les mots individuels en groupes dynamiques de 2 à 3 mots
+        (style Hormozi / TikTok viral) pour une lecture fluide et percutante.
         """
-        # 1. Obtenir les mots horodatés
-        words = self.extract_word_timestamps(audio_path)
-        
-        # 2. Charger la vidéo
-        video = VideoFileClip(video_path)
-        
-        # 3. Créer un TextClip pour chaque mot
-        subtitle_clips = []
-        
-        # Astuce : Pour TikTok/Reels, le texte doit être gros, centré, jaune ou blanc,
-        # avec un contour noir pour ressortir.
+        if not words:
+            return []
+
+        chunks = []
+        current_words = []
+        chunk_start = words[0]["start"]
+        chunk_end = words[0]["end"]
+
         for w in words:
-            # Durée minimum pour éviter un bug de TextClip sur des mots ultra-courts
-            duration = max(w["end"] - w["start"], 0.1)
-            
-            # ATTENTION : Nécessite ImageMagick d'installé sur le système pour TextClip
-            txt_clip = (TextClip(w["text"], fontsize=90, color='yellow', font='Arial-Bold',
-                                 stroke_color='black', stroke_width=3, method='caption', 
-                                 size=(video.w * 0.8, None))
-                        .set_position(('center', 'center'))
-                        .set_start(w["start"])
-                        .set_duration(duration))
-            
+            word_text = w["text"].strip()
+            if not word_text:
+                continue
+
+            current_len = sum(len(x) for x in current_words) + len(current_words)
+            if current_words and (len(current_words) >= max_words or (current_len + len(word_text)) > max_chars):
+                chunks.append({
+                    "text": " ".join(current_words).upper(),
+                    "start": chunk_start,
+                    "end": max(chunk_end, chunk_start + 0.15)
+                })
+                current_words = [word_text]
+                chunk_start = w["start"]
+                chunk_end = w["end"]
+            else:
+                if not current_words:
+                    chunk_start = w["start"]
+                current_words.append(word_text)
+                chunk_end = w["end"]
+
+        if current_words:
+            chunks.append({
+                "text": " ".join(current_words).upper(),
+                "start": chunk_start,
+                "end": max(chunk_end, chunk_start + 0.2)
+            })
+
+        # Éviter tout chevauchement entre deux chunks consécutifs
+        for i in range(len(chunks) - 1):
+            if chunks[i]["end"] > chunks[i + 1]["start"]:
+                chunks[i]["end"] = chunks[i + 1]["start"]
+
+        return chunks
+
+    def build_subtitle_clips(self, word_timestamps, video_size, audio_path=None):
+        """
+        Construit la liste des TextClips MoviePy 2.x à superposer sur la vidéo.
+        """
+        words = word_timestamps
+        if not words and audio_path and os.path.exists(audio_path):
+            words = self.extract_word_timestamps(audio_path)
+
+        chunks = self.group_words_into_chunks(words, max_words=3, max_chars=20)
+        logger.info(f"Génération de {len(chunks)} cartons de sous-titres dynamiques...")
+
+        video_w, video_h = video_size
+        subtitle_clips = []
+
+        for idx, chunk in enumerate(chunks):
+            duration = max(chunk["end"] - chunk["start"], 0.12)
+            # Alternance Jaune / Blanc pour dynamiser la rétention visuelle
+            text_color = "#FFD700" if idx % 2 == 0 else "#FFFFFF"
+
+            txt_clip = (
+                TextClip(
+                    font=self.font_path,
+                    text=chunk["text"],
+                    font_size=76,
+                    color=text_color,
+                    stroke_color="black",
+                    stroke_width=5,
+                    method="caption",
+                    size=(int(video_w * 0.86), None),
+                    text_align="center",
+                    margin=(12, 16),
+                )
+                .with_position(("center", int(video_h * 0.62)))
+                .with_start(chunk["start"])
+                .with_duration(duration)
+            )
             subtitle_clips.append(txt_clip)
-            
-        # 4. Superposer sur la vidéo originale
+
+        return subtitle_clips
+
+    def overlay_subtitles_on_video(self, video_path, audio_path, output_path, word_timestamps=None):
+        """
+        Méthode standalone pour incruster les sous-titres sur une vidéo existante.
+        """
+        video = VideoFileClip(video_path)
+        subtitle_clips = self.build_subtitle_clips(word_timestamps, video.size, audio_path=audio_path)
         final_video = CompositeVideoClip([video] + subtitle_clips)
-        
-        print(f"[SubtitleGenerator] Rendu avec sous-titres : {output_path}")
+
+        logger.info(f"Rendu avec sous-titres : {output_path}")
         final_video.write_videofile(
-            output_path, 
-            codec="libx264", 
+            output_path,
+            codec="libx264",
             audio_codec="aac",
-            fps=30,
-            preset="ultrafast"
+            fps=24,
+            preset="ultrafast",
+            logger=None
         )
-        
         video.close()
         final_video.close()
-        print("[SubtitleGenerator] Terminé avec succès !")
-
-if __name__ == "__main__":
-    # Test local
-    print("Initialisation du module de sous-titrage...")
-    # sg = SubtitleGenerator(model_size="small")
-    # sg.overlay_subtitles_on_video("rendu_tiktok.mp4", "test_audio.mp3", "rendu_final_subbed.mp4")
+        logger.info("Sous-titrage terminé avec succès !")
