@@ -142,10 +142,22 @@ class ProposalsRelationManager extends RelationManager
                         $fullSpecs = $record->description
                             ?: "Produit tendance TikTok : {$record->title} ({$niche}).\nContexte viral : {$trend->description}";
 
-                        // 1. Créer le Produit avec son image et ses vraies spécifications techniques
+                        // Récupérer toutes les images des propositions de cette tendance pour le montage multi-scènes
+                        $galleryImages = $trend->proposals()
+                            ->whereNotNull('image_url')
+                            ->pluck('image_url')
+                            ->unique()
+                            ->values()
+                            ->toArray();
+                        if (!in_array($record->image_url, $galleryImages) && $record->image_url) {
+                            array_unshift($galleryImages, $record->image_url);
+                        }
+
+                        // 1. Créer le Produit avec sa galerie d'images et ses vraies spécifications techniques
                         $product = \App\Models\Product::create([
                             'name' => $record->title,
                             'image_url' => $record->image_url,
+                            'gallery_images' => $galleryImages,
                             'supplier_url' => $record->aliexpress_url,
                             'niche' => $niche,
                             'description' => $fullSpecs . "\n\nSource AliExpress : " . $record->aliexpress_url,

@@ -61,6 +61,7 @@ class EditProduct extends EditRecord
                                     $name = $product['title'] ?? 'Produit Inconnu';
                                     $description = trim(strip_tags($product['body_html'] ?? ''));
                                     $imageUrl = $product['image']['src'] ?? ($product['images'][0]['src'] ?? '');
+                                    $gallery = array_slice(array_filter(array_map(fn ($img) => $img['src'] ?? null, $product['images'] ?? [])), 0, 6);
                                 }
                             }
                         }
@@ -72,6 +73,7 @@ class EditProduct extends EditRecord
                             'name' => $name,
                             'supplier_url' => $url,
                             'image_url' => $imageUrl ?: $this->record->image_url,
+                            'gallery_images' => !empty($gallery) ? $gallery : $this->record->gallery_images,
                             'description' => $description ?: $this->record->description,
                         ]);
                         $this->fillForm();

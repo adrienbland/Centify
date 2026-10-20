@@ -8,6 +8,10 @@ class Product extends Model
 {
     protected $guarded = [];
 
+    protected $casts = [
+        'gallery_images' => 'array',
+    ];
+
     public function store()
     {
         return $this->belongsTo(Store::class);

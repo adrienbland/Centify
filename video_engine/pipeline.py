@@ -14,7 +14,7 @@ logger = setup_logger("VideoPipeline")
 class VideoPipeline:
     """
     Orchestrateur final qui lie toutes les briques (Voix-Off Edge-TTS, Horodatages WordBoundary,
-    Incrustation Image Produit, Montage Anti-Shadowban MoviePy 2.x et Sous-titres Dynamiques).
+    Montage Dynamique Multi-Scènes Ken Burns 9:16 et Sous-titres Dynamiques).
     """
     def __init__(self, workspace_dir=None):
         self.workspace = workspace_dir or Config.WORKSPACE_DIR
@@ -44,6 +44,8 @@ class VideoPipeline:
         source_video_path: str = None,
         bg_music_path: str = None,
         product_image_url: str = None,
+        gallery_images=None,
+        hook_text: str = None,
         voice: str = None
     ):
         """
@@ -76,21 +78,26 @@ class VideoPipeline:
                 voice=voice
             )
 
-            logger.info("Étape 3/3 : Création des sous-titres dynamiques, incrustation image & Montage MP4...")
-            subtitle_clips = self.subtitle_generator.build_subtitle_clips(
-                word_timestamps=word_timestamps,
-                video_size=Config.TARGET_RESOLUTION,
-                audio_path=audio_path
+            logger.info("Étape 3/3 : Découpage des sous-titres & Montage Multi-Scènes Ken Burns MP4...")
+            if not word_timestamps and os.path.exists(audio_path):
+                word_timestamps = self.subtitle_generator.extract_word_timestamps(audio_path)
+
+            subtitle_chunks = self.subtitle_generator.group_words_into_chunks(
+                word_timestamps,
+                max_words=3,
+                max_chars=20
             )
 
             success, duration_sec = self.video_processor.assemble_video(
                 source_video_path=source_video_path,
                 voiceover_path=audio_path,
                 output_path=final_output_path,
-                subtitle_clips=subtitle_clips,
+                subtitle_chunks=subtitle_chunks,
                 bg_music_path=bg_music_path,
                 product_image_url=product_image_url,
-                product_name=product_name
+                gallery_images=gallery_images,
+                product_name=product_name,
+                hook_text=hook_text
             )
 
             if not success or not os.path.exists(final_output_path):
