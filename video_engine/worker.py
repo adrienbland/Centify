@@ -173,6 +173,7 @@ def process_pending_videos(pipeline: VideoPipeline):
             """
             SELECT v.id, v.status, v.product_id, v.script_id, v.user_feedback, v.social_network,
                    p.name AS product_name, p.niche AS product_niche, p.description AS product_description,
+                   p.image_url AS product_image_url,
                    s.full_text AS script_full_text, s.hook AS script_hook, s.body AS script_body, s.cta AS script_cta
             FROM videos v
             LEFT JOIN products p ON v.product_id = p.id
@@ -189,6 +190,7 @@ def process_pending_videos(pipeline: VideoPipeline):
             product_name = video["product_name"] or f"Produit #{video['product_id']}"
             niche = video["product_niche"] or "E-commerce"
             script_text = video["script_full_text"] or ""
+            product_image_url = video.get("product_image_url")
 
             logger.info(f"🎬 Début du traitement de la vidéo #{vid_id} (statut: {initial_status}) pour '{product_name}'")
 
@@ -214,7 +216,7 @@ def process_pending_videos(pipeline: VideoPipeline):
                 broll_path = resolve_media_asset(cursor, "b_roll")
                 bg_music_path = resolve_media_asset(cursor, "audio")
 
-                # Exécution du pipeline complet (Edge-TTS + WordBoundary + MoviePy 9:16 + Sous-titres)
+                # Exécution du pipeline complet (Edge-TTS + WordBoundary + Image Produit + MoviePy 9:16 + Sous-titres)
                 success, web_path, duration_sec = asyncio.run(
                     pipeline.render_for_video_record(
                         video_id=vid_id,
@@ -222,7 +224,8 @@ def process_pending_videos(pipeline: VideoPipeline):
                         niche=niche,
                         script_text=script_text,
                         source_video_path=broll_path,
-                        bg_music_path=bg_music_path
+                        bg_music_path=bg_music_path,
+                        product_image_url=product_image_url
                     )
                 )
 

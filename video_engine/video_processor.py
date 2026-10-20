@@ -1,17 +1,22 @@
 import os
+import io
 import random
 import subprocess
-from moviepy import VideoFileClip, AudioFileClip, CompositeVideoClip, CompositeAudioClip, vfx
+import requests
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, CompositeAudioClip, vfx
 from config import Config
 from logger import setup_logger
 
 logger = setup_logger("VideoProcessor")
 
+
 class VideoProcessor:
     """
     Moteur de rendu vidéo automatisé (MoviePy 2.x).
     Applique des transformations dynamiques pour éviter le shadowban (contenu dupliqué),
-    gère le bouclage automatique du B-Roll et mixe la voix-off + sous-titres en une seule passe.
+    incruste la carte visuelle du produit (Image Produit + Badge) au-dessus du B-Roll,
+    et mixe la voix-off + sous-titres dynamiques en une seule passe.
     """
     def __init__(self):
         self.target_resolution = Config.TARGET_RESOLUTION
@@ -20,8 +25,7 @@ class VideoProcessor:
     def ensure_default_broll(default_broll_path):
         """
         Si aucun B-Roll n'est présent sur le disque, génère automatiquement une vidéo
-        verticale (1080x1920) fluide et moderne via FFmpeg pour garantir que le pipeline
-        puisse toujours tourner sans erreur.
+        verticale (1080x1920) fluide et moderne via FFmpeg.
         """
         if os.path.exists(default_broll_path) and os.path.getsize(default_broll_path) > 10000:
             return default_broll_path
@@ -29,7 +33,6 @@ class VideoProcessor:
         os.makedirs(os.path.dirname(default_broll_path), exist_ok=True)
         logger.info(f"Génération d'un B-Roll vertical par défaut vers {default_broll_path}...")
 
-        # Génère un fond animé dégradé sombre/violet esthétique en 1080x1920 (20 secondes, 24 fps)
         cmd = [
             "ffmpeg", "-y",
             "-f", "lavfi",
@@ -43,7 +46,6 @@ class VideoProcessor:
         ]
         res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if res.returncode != 0:
-            # Fallback universel si le filtre gradients n'est pas compilé dans cette version de ffmpeg
             cmd_fallback = [
                 "ffmpeg", "-y",
                 "-f", "lavfi",
@@ -59,6 +61,105 @@ class VideoProcessor:
         logger.info("B-Roll vertical par défaut généré avec succès.")
         return default_broll_path
 
+    @staticmethod
+    def load_pil_image(image_source: str):
+        """
+        Charge une image PIL depuis un chemin local (/app/medias/...) ou une URL HTTP(S).
+        """
+        if not image_source:
+            return None
+
+        try:
+            # Cas 1 : Chemin relatif web /medias/...
+            if image_source.startswith("/medias/"):
+                local_path = os.path.join(Config.WORKSPACE_DIR, image_source[len("/medias/"):])
+                if os.path.exists(local_path):
+                    return Image.open(local_path).convert("RGBA")
+
+            # Cas 2 : Chemin local direct
+            if os.path.exists(image_source):
+                return Image.open(image_source).convert("RGBA")
+
+            candidate = os.path.join(Config.WORKSPACE_DIR, image_source.lstrip("/"))
+            if os.path.exists(candidate):
+                return Image.open(candidate).convert("RGBA")
+
+            # Cas 3 : URL HTTP / HTTPS
+            if image_source.startswith("http://") or image_source.startswith("https://"):
+                resp = requests.get(
+                    image_source,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=10
+                )
+                resp.raise_for_status()
+                return Image.open(io.BytesIO(resp.content)).convert("RGBA")
+        except Exception as e:
+            logger.warning(f"Impossible de charger l'image produit '{image_source}': {e}")
+        return None
+
+    def build_product_showcase_clip(self, image_source: str, product_name: str, duration: float, temp_png_path: str):
+        """
+        Crée un ImageClip MoviePy mettant en valeur la photo du produit dans un cadre moderne
+        arrondi avec bordure lumineuse dans la moitié supérieure de l'écran 9:16.
+        """
+        pil_img = self.load_pil_image(image_source)
+        if pil_img is None:
+            return None
+
+        try:
+            card_w, card_h = 760, 820
+            card = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
+            draw = ImageDraw.new(card) if hasattr(ImageDraw, "new") else ImageDraw.Draw(card)
+
+            # Fond de carte sombre semi-transparent avec bordure violette
+            draw.rounded_rectangle(
+                [(0, 0), (card_w - 1, card_h - 1)],
+                radius=40,
+                fill=(17, 24, 39, 235),
+                outline=(168, 85, 247, 255),
+                width=6
+            )
+
+            # Redimensionner l'image du produit en carré 680x680 centré
+            prod_resized = ImageOps.fit(pil_img.convert("RGB"), (680, 680), method=Image.Resampling.LANCZOS)
+            mask = Image.new("L", (680, 680), 0)
+            mask_draw = ImageDraw.Draw(mask)
+            mask_draw.rounded_rectangle([(0, 0), (680, 680)], radius=28, fill=255)
+
+            card.paste(prod_resized, (40, 40), mask)
+
+            # Bandeau titre produit en bas de la carte
+            font_path = Config.SUBTITLE_FONT
+            try:
+                font = ImageFont.truetype(font_path, 30)
+            except Exception:
+                font = ImageFont.load_default()
+
+            short_title = (product_name or "Produit Tendance")[:34]
+            if len(product_name or "") > 34:
+                short_title += "..."
+
+            draw.text(
+                (card_w // 2, 765),
+                short_title.upper(),
+                fill=(255, 255, 255, 255),
+                font=font,
+                anchor="mm"
+            )
+
+            card.save(temp_png_path, "PNG")
+
+            img_clip = (
+                ImageClip(temp_png_path)
+                .with_position(("center", 160))
+                .with_start(0)
+                .with_duration(duration)
+            )
+            return img_clip
+        except Exception as e:
+            logger.warning(f"Impossible de créer la carte visuelle produit : {e}")
+            return None
+
     def apply_transformations(self, clip):
         """
         Applique un ensemble de transformations aléatoires mais esthétiques (MoviePy 2.x)
@@ -66,11 +167,9 @@ class VideoProcessor:
         """
         try:
             effects = []
-            # 1. Flip horizontal aléatoire
             if random.choice([True, False]):
                 effects.append(vfx.MirrorX())
 
-            # 2. Ajustement colorimétrique subtil (+/- 6%)
             lum_factor = random.uniform(0.94, 1.06)
             effects.append(vfx.MultiplyColor(lum_factor))
 
@@ -114,12 +213,14 @@ class VideoProcessor:
         voiceover_path,
         output_path,
         subtitle_clips=None,
-        bg_music_path=None
+        bg_music_path=None,
+        product_image_url=None,
+        product_name=None
     ):
         """
         Assemble en une seule passe :
         - Vidéo B-Roll (bouclée ou coupée à la durée exacte de la voix-off)
-        - Transformations Anti-Shadowban + Recadrage 9:16
+        - Carte visuelle du Produit (si le produit possède une image)
         - Voix-off IA (+ musique de fond optionnelle à volume réduit)
         - Sous-titres dynamiques TikTok
         Retourne (success: bool, duration_seconds: int)
@@ -128,31 +229,32 @@ class VideoProcessor:
         video_clip = None
         audio_clip = None
         bg_music_clip = None
+        product_card_clip = None
         final_clip = None
+        temp_card_png = os.path.join(
+            os.path.dirname(output_path),
+            f"temp_card_{random.randint(1000, 9999)}.png"
+        )
 
         try:
             video_clip = VideoFileClip(source_video_path)
             audio_clip = AudioFileClip(voiceover_path)
 
-            # Durée cible = durée de la voix-off + 0.3s de respiration finale
             target_duration = max(audio_clip.duration + 0.3, 1.0)
 
             video_clip = self.apply_transformations(video_clip)
             video_clip = self.crop_to_vertical(video_clip)
 
-            # Si le B-Roll est plus court que la voix-off, on le boucle automatiquement
             if video_clip.duration < target_duration:
                 video_clip = video_clip.with_effects([vfx.Loop(duration=target_duration)])
             else:
                 video_clip = video_clip.subclipped(0, target_duration)
 
-            # Mixage audio : Voix-off + Musique de fond optionnelle (à 12% du volume)
             final_audio = audio_clip
             if bg_music_path and os.path.exists(bg_music_path):
                 try:
                     bg_music_clip = AudioFileClip(bg_music_path)
                     if bg_music_clip.duration < target_duration:
-                        # Répétition simple si la musique est plus courte
                         loops = int(target_duration // bg_music_clip.duration) + 1
                         from moviepy import concatenate_audioclips
                         bg_music_clip = concatenate_audioclips([bg_music_clip] * loops)
@@ -163,9 +265,25 @@ class VideoProcessor:
 
             video_clip = video_clip.with_audio(final_audio)
 
-            # Superposition des sous-titres dynamiques en une seule passe d'encodage
+            layers = [video_clip]
+
+            # Incrustation de l'image du produit au-dessus du B-Roll si disponible
+            if product_image_url:
+                product_card_clip = self.build_product_showcase_clip(
+                    image_source=product_image_url,
+                    product_name=product_name,
+                    duration=target_duration,
+                    temp_png_path=temp_card_png
+                )
+                if product_card_clip is not None:
+                    logger.info(f"Incrustation de l'image produit : {product_image_url}")
+                    layers.append(product_card_clip)
+
             if subtitle_clips:
-                final_clip = CompositeVideoClip([video_clip] + subtitle_clips).with_duration(target_duration)
+                layers.extend(subtitle_clips)
+
+            if len(layers) > 1:
+                final_clip = CompositeVideoClip(layers).with_duration(target_duration)
             else:
                 final_clip = video_clip
 
@@ -182,6 +300,7 @@ class VideoProcessor:
                 fps=24,
                 threads=4,
                 preset="ultrafast",
+                ffmpeg_params=["-pix_fmt", "yuv420p"],
                 logger=None
             )
 
@@ -192,9 +311,14 @@ class VideoProcessor:
             logger.error(f"Erreur lors de l'assemblage de la vidéo : {e}")
             raise
         finally:
-            for c in (final_clip, video_clip, audio_clip, bg_music_clip):
+            for c in (final_clip, product_card_clip, video_clip, audio_clip, bg_music_clip):
                 if c is not None:
                     try:
                         c.close()
                     except Exception:
                         pass
+            if os.path.exists(temp_card_png):
+                try:
+                    os.remove(temp_card_png)
+                except Exception:
+                    pass

@@ -92,7 +92,7 @@ class ScriptsRelationManager extends RelationManager
                     ])
                     ->action(function (RelationManager $livewire, array $data) {
                         $product = $livewire->getOwnerRecord();
-                        $manualPrompt = $data['ai_prompt'] ?? ($product->ai_custom_prompt ?? "Rends ça hyper engageant.");
+                        $manualPrompt = !empty($data['ai_prompt']) ? $data['ai_prompt'] : (!empty($product->ai_custom_prompt) ? $product->ai_custom_prompt : "Rends ça hyper engageant.");
                         
                         $prompt = "Tu es un copywriter expert TikTok et Shorts. Écris un script viral très dynamique (15s) pour vendre ce produit : '{$product->name}'.\n\n"
                                 . "Voici les spécifications et la description du produit :\n{$product->description}\n\n"

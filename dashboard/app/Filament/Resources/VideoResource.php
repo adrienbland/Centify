@@ -279,7 +279,7 @@ class VideoResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            \App\Filament\Resources\VideoResource\RelationManagers\VariantsRelationManager::class,
         ];
     }
 

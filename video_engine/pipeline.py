@@ -10,10 +10,11 @@ from logger import setup_logger
 
 logger = setup_logger("VideoPipeline")
 
+
 class VideoPipeline:
     """
     Orchestrateur final qui lie toutes les briques (Voix-Off Edge-TTS, Horodatages WordBoundary,
-    Montage Anti-Shadowban MoviePy 2.x et Sous-titres Dynamiques) pour générer une vidéo TikTok/Shorts.
+    Incrustation Image Produit, Montage Anti-Shadowban MoviePy 2.x et Sous-titres Dynamiques).
     """
     def __init__(self, workspace_dir=None):
         self.workspace = workspace_dir or Config.WORKSPACE_DIR
@@ -42,6 +43,7 @@ class VideoPipeline:
         script_text: str,
         source_video_path: str = None,
         bg_music_path: str = None,
+        product_image_url: str = None,
         voice: str = None
     ):
         """
@@ -56,20 +58,17 @@ class VideoPipeline:
         final_output_path = os.path.join(self.renders_dir, final_filename)
         web_relative_path = f"/medias/renders/{final_filename}"
 
-        # S'assurer qu'on a un B-Roll valide (ou générer le B-Roll vertical par défaut)
         if not source_video_path or not os.path.exists(source_video_path):
             default_broll = os.path.join(self.library_dir, "default_broll.mp4")
             source_video_path = self.video_processor.ensure_default_broll(default_broll)
 
         try:
-            # 1. Texte du script (utilise le script approuvé, ou en génère un si vide)
             if not script_text or not script_text.strip():
                 logger.info("Étape 1/3 : Aucun script fourni, génération via Ollama...")
                 script_text = AIGenerator.generate_script(product_name, niche)
             else:
                 logger.info("Étape 1/3 : Utilisation du script approuvé dans le Hub.")
 
-            # 2. Voix-off Edge-TTS + Extraction directe des WordBoundaries
             logger.info("Étape 2/3 : Synthèse vocale Edge-TTS & Horodatage des mots...")
             word_timestamps = await AIGenerator.generate_voiceover_with_timestamps(
                 script_text,
@@ -77,8 +76,7 @@ class VideoPipeline:
                 voice=voice
             )
 
-            # 3. Construction des sous-titres dynamiques + Montage 9:16 en une seule passe
-            logger.info("Étape 3/3 : Création des sous-titres dynamiques & Montage MP4...")
+            logger.info("Étape 3/3 : Création des sous-titres dynamiques, incrustation image & Montage MP4...")
             subtitle_clips = self.subtitle_generator.build_subtitle_clips(
                 word_timestamps=word_timestamps,
                 video_size=Config.TARGET_RESOLUTION,
@@ -90,7 +88,9 @@ class VideoPipeline:
                 voiceover_path=audio_path,
                 output_path=final_output_path,
                 subtitle_clips=subtitle_clips,
-                bg_music_path=bg_music_path
+                bg_music_path=bg_music_path,
+                product_image_url=product_image_url,
+                product_name=product_name
             )
 
             if not success or not os.path.exists(final_output_path):
@@ -100,7 +100,6 @@ class VideoPipeline:
             return True, web_relative_path, duration_sec
 
         finally:
-            # Nettoyage du fichier audio temporaire
             if os.path.exists(audio_path):
                 try:
                     os.remove(audio_path)

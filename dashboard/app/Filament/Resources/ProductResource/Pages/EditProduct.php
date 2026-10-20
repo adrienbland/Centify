@@ -19,7 +19,7 @@ class EditProduct extends EditRecord
                 ->color('info')
                 ->form([
                     \Filament\Forms\Components\TextInput::make('url')
-                        ->label('URL du produit')
+                        ->label('URL du produit (Shopify ou AliExpress)')
                         ->url()
                         ->required(),
                 ])
@@ -27,44 +27,59 @@ class EditProduct extends EditRecord
                     $url = $data['url'];
                     $name = '';
                     $description = '';
-                    
+                    $imageUrl = '';
+
                     try {
                         if (str_contains($url, 'aliexpress.com')) {
-                            $html = @file_get_contents($url);
-                            if ($html && preg_match('/<title>(.*?)<\/title>/i', $html, $matches)) {
+                            $response = \Illuminate\Support\Facades\Http::timeout(8)
+                                ->withHeaders(['User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'])
+                                ->get($url);
+                            $html = $response->body();
+
+                            if ($html && preg_match('/<title>(.*?)<\/title>/is', $html, $matches)) {
                                 $name = explode('|', $matches[1])[0] ?? 'Produit AliExpress';
                                 $name = trim(str_replace(['AliExpress', 'Achetez'], '', $name));
                             }
-                            $description = "Produit importé depuis AliExpress.\n\n$url";
+                            if ($html && preg_match('/property=["\']og:image["\']\s+content=["\'](.*?)["\']/i', $html, $imgMatches)) {
+                                $imageUrl = $imgMatches[1];
+                            }
+                            if ($html && preg_match('/name=["\']description["\']\s+content=["\'](.*?)["\']/i', $html, $descMatches)) {
+                                $description = html_entity_decode($descMatches[1]);
+                            }
+                            if (!$description) {
+                                $description = "Produit importé depuis AliExpress : {$name}\nURL: {$url}";
+                            }
                         } else {
                             $jsonUrl = strtok($url, '?');
                             if (!str_ends_with($jsonUrl, '.json')) {
                                 $jsonUrl .= '.json';
                             }
-                            $response = \Illuminate\Support\Facades\Http::timeout(5)->get($jsonUrl);
+                            $response = \Illuminate\Support\Facades\Http::timeout(6)->get($jsonUrl);
                             if ($response->successful()) {
                                 $product = $response->json('product');
                                 if ($product) {
                                     $name = $product['title'] ?? 'Produit Inconnu';
-                                    $description = strip_tags($product['body_html'] ?? '');
+                                    $description = trim(strip_tags($product['body_html'] ?? ''));
+                                    $imageUrl = $product['image']['src'] ?? ($product['images'][0]['src'] ?? '');
                                 }
                             }
                         }
-                    } catch (\Exception $e) {}
+                    } catch (\Exception $e) {
+                    }
 
-                    // Mise à jour directe du modèle
                     if ($name) {
                         $this->record->update([
                             'name' => $name,
+                            'supplier_url' => $url,
+                            'image_url' => $imageUrl ?: $this->record->image_url,
                             'description' => $description ?: $this->record->description,
                         ]);
-                        // Rafraichir le formulaire
                         $this->fillForm();
 
                         \Filament\Notifications\Notification::make()
-                            ->title('Produit scrapé et mis à jour')
+                            ->title('Produit (Nom, Image & Specs) mis à jour !')
                             ->success()
-                            ->send();
+                            ->sendToDatabase(auth()->user());
                     }
                 }),
             Actions\DeleteAction::make(),
